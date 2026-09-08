@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: uscis_postgres
+    environment:
+      POSTGRES_DB: uscis_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d uscis_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  scraper:
+    build: .
+    container_name: uscis_scraper
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: uscis_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    restart: on-failure
+
+  ui:
+    build: .
+    container_name: uscis_ui
+    # Overrides Dockerfile CMD to start the FastAPI server via python module execution:
+    command: python -m uvicorn ui_server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8022:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      POSTGRES_DB: uscis_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+volumes:
+  pgdata:
